@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>YOLO 实时检测</title>
+    <style>
+        body {
+            font-family: -apple-system, "Microsoft YaHei", sans-serif;
+            text-align: center;
+            background: #1a1a1a;
+            color: #eee;
+            margin: 0;
+            padding: 20px;
+        }
+        h2 { margin: 10px 0; font-weight: 500; }
+        video, canvas {
+            max-width: 640px;
+            border: 2px solid #444;
+            border-radius: 8px;
+            margin: 10px;
+            background: #000;
+        }
+        #result {
+            font-size: 15px;
+            color: #4ade80;
+            white-space: pre-wrap;
+            margin-top: 10px;
+            min-height: 40px;
+        }
+        .status { color: #888; font-size: 13px; }
+    </style>
+</head>
+<body>
+    <h2>YOLO 实时检测</h2>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <div id="result">正在初始化...</div>
+    <div class="status" id="status"></div>
+
+    <script>
+        // 1. 定义后端地址（统一用大写，避免未定义报错）
+        const API_BASE = window.api ? window.api.baseUrl : 'http://127.0.0.1:8000';
+
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const resultDiv = document.getElementById('result');
+        const statusDiv = document.getElementById('status');
+
+        // 2. 打开摄像头
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+                statusDiv.textContent = '摄像头已就绪';
+                resultDiv.textContent = '等待检测...';
+            })
+            .catch(err => {
+                resultDiv.textContent = '摄像头打开失败: ' + err.message;
+                console.error('摄像头错误:', err);
+            });
+
+        // 3. 每 500ms 截一帧发给后端
+        setInterval(async () => {
+            if (video.readyState !== 4) return;
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+
+            canvas.toBlob(async (blob) => {
+                if (!blob) return;
+
+                const formData = new FormData();
+                formData.append('file', blob, 'frame.jpg');
+
+                try {
+                    const res = await fetch(API_BASE + '/detect', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+
+                    if (data.detections && data.detections.length > 0) {
+                        resultDiv.textContent = data.detections
+                            .map(d => `${d.class}  ${(d.confidence * 100).toFixed(1)}%`)
+                            .join('\n');
+                    } else {
+                        resultDiv.textContent = '未检测到目标';
+                    }
+                } catch (e) {
+                    resultDiv.textContent = '请求失败: ' + e.message;
+                    console.error('请求错误:', e);
+                }
+            }, 'image/jpeg', 0.8);
+        }, 500);
+    </script>
+</body>
+</html></html>

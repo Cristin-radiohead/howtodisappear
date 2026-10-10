@@ -1,0 +1,35 @@
+{
+  "name": "yolo-electron",
+  "version": "1.0.0",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder build --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.yolo.electron",
+    "productName": "YOLO Detector",
+    "files": [
+      "electron/**/*",
+      "frontend/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/server",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  }
+}
