@@ -1,1 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+yolo-env/
+venv/
+.env
 
+# Node
+node_modules/
+dist/
+build/
+
+# 训练输出
+runs/
+*.pt
+*.onnx
+*.engine
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
