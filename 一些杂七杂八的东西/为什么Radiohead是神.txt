@@ -1,0 +1,177 @@
+目标：在昇腾开发板上跑通 YOLO11 推理，做成可展示的 AI 应用。
+
+起点：
+
+· 成功 SSH 登录 Atlas 200I DK A2（root@davinci-mini）
+· 系统：Ubuntu 22.04，芯片：Ascend310B4
+· 开发板自带 CANN 7.0.RC1
+
+关键词：完全从零开始，没有现成教程。
+
+---
+
+Slide 3：第一阶段的探索与碰壁
+
+我的第一反应：开发板没摄像头，那就用视频文件跑推理。
+
+遇到的问题：
+
+· 开发板 OpenCV GUI: NONE，cv2.imshow 用不了
+· 视频 H.264 解码失败：Could not open codec h264
+· 摄像头被锁、画面全是误检
+
+关键决策：
+
+"不要在错误的路上越走越远。换思路。"
+
+---
+
+Slide 4：模型转换的坎坷
+
+目标：把 PC 训练的 YOLO11n 转成开发板能用的 OM 模型。
+
+我尝试的路线：
+
+1. PC 上装 CANN 7.0.0 → 报错 Conv2D not found（缺 310b 算子包）
+2. 升级到 CANN 8.5.0 + 310b-ops → ATC 转换成功
+3. 但 OM 在开发板上推理输出异常（全 0.5 / nan）
+
+关键发现：
+
+开发板 CANN 7.0.RC1 vs PC CANN 8.5.0 版本不匹配。
+
+解决：
+
+· 直接在开发板上用自带 CANN 转 OM
+· 加大 Swap、限制并行编译、后台运行
+
+---
+
+Slide 5：ONNX 导出的隐藏坑
+
+问题：开发板转出来的 OM，检测结果仍然全是误检。
+
+排查过程：
+
+1. 在 PC 上用 ONNX Runtime 跑同一个 ONNX → 最大分数只有 0.07
+2. 对比 Ultralytics 直接推理 → 置信度 0.42
+3. 定位：ONNX 导出参数有问题
+
+关键修复：
+
+```python
+model.export(format="onnx", opset=12, simplify=False, dynamic=False)
+```
+
+simplify=True 会破坏模型结构。
+
+---
+
+Slide 6：后处理的致命误区
+
+问题：OM 输出做 sigmoid 后，所有分数都变成 0.50。
+
+错误代码：
+
+```python
+if scores.max() < 1.0:
+    scores = 1.0 / (1.0 + np.exp(-scores))  # ❌
+```
+
+为什么错：
+
+YOLO11 的 OM 输出已经是概率值（max 0.94），再加 sigmoid 会把所有分数挤到 0.5 附近，argmax 随机输出 cat。
+
+正确做法：
+
+```python
+class_scores = pred[:, 4:]   # 直接用
+max_scores = np.max(class_scores, axis=1)
+```
+
+---
+
+Slide 7：最终方案 —— 端到端链路
+
+完整流程：
+
+```
+PC 训练 YOLO11n
+    ↓
+导出 ONNX (opset=12, simplify=False)
+    ↓
+开发板 ATC 转 OM (CANN 7.0.RC1)
+    ↓
+ais_bench NPU 推理
+    ↓
+letterbox 预处理 + 直接使用输出 + NMS + 坐标还原
+    ↓
+Python 标准库 HTTP 服务（MJPEG / 图片上传）
+    ↓
+PC 浏览器访问
+```
+
+性能：NPU 推理 10.28 ms/帧，约 97 FPS。
+
+---
+
+Slide 8：成品展示
+
+两个模式：
+
+1. 图片上传检测：浏览器上传图片 → 返回带检测框的结果
+2. 摄像头实时检测：USB 摄像头 → MJPEG 流
+
+截图：
+
+· bus.jpg 检测结果（bus 0.93 + 多 person）
+· 摄像头检测结果（cup 0.65 + mouse 0.61）
+
+关键点：
+
+· 完全自包含，不依赖外网
+· 用 Python 标准库，无需第三方依赖
+
+---
+
+Slide 9：踩坑总结（挑最重要的 3 条讲）
+
+坑 原因 解决
+OM 输出全 0.5 sigmoid 陷阱 直接使用模型输出
+ONNX 检测分数极低 simplify=True 改成 simplify=False
+OM 在开发板异常 CANN 版本不匹配 开发板直接 ATC 转
+
+核心心得：
+
+不要迷信"标准流程"，要对着现象逐步验证。
+
+---
+
+Slide 10：可复用的经验
+
+技术层面：
+
+· 昇腾 OM 转换的核心参数组合
+· YOLO11 输出格式与后处理
+· letterbox 预处理与坐标还原
+
+方法论层面：
+
+· 遇到问题先做最小复现（如 ONNX 对比测试）
+· 善用官方样例避免重复造轮子
+· 版本匹配是跨平台部署的第一原则
+
+---
+
+Slide 11：后续计划
+
+· 训练自定义数据集，替换 COCO8（提升精度）
+· 探索 YOLO11s/m（提升实时检测稳定性）
+· 接入 OneAPI，做智能体解说
+· 打包 Docker 镜像，便于部署
+
+---
+
+Slide 12：致谢与 Q&A
+
+· 感谢昇腾社区、Ultralytics 官方文档
