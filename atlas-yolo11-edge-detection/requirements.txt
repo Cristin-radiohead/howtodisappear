@@ -1,0 +1,10 @@
+# 开发板端
+ais_bench
+numpy
+opencv-python
+
+# PC 端（训练与导出）
+ultralytics
+onnx
+onnxruntime
+torch
