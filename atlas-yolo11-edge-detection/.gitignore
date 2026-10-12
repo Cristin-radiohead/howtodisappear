@@ -1,1 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+env/
+.env
 
+# 模型与数据（太大，不放仓库）
+*.om
+*.onnx
+*.pt
+*.jpg
+*.png
+!assets/**/*.png
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
